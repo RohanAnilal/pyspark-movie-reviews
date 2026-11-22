@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lower, regexp_replace, split, explode, length, size, avg, count
+from pyspark.sql.functions import col, length, trim
 
 spark = SparkSession.builder.appName("pyspark-movie-reviews").getOrCreate()
 spark.sparkContext.setLogLevel("ERROR")
@@ -12,34 +12,22 @@ df = (
     .csv("IMDB Dataset.csv/IMDB Dataset.csv")
 )
 
-print("Rows:", df.count())
 df.printSchema()
 df.show(5, truncate=60)
 
-print("Sentiment counts")
-df.groupBy("sentiment").count().show()
+df = df.filter(col("review").isNotNull() & (trim(col("review")) != ""))
 
-df = df.withColumn("clean", regexp_replace(col("review"), "<[^>]+>", " "))
-df = df.withColumn("clean", lower(regexp_replace(col("clean"), "[^a-zA-Z\\s]", "")))
-df = df.withColumn("words", split(col("clean"), "\\s+"))
-df = df.withColumn("word_count", size(col("words")))
+print("Total reviews:", df.count())
 
-print("Average review length by sentiment")
-df.groupBy("sentiment").agg(avg("word_count").alias("avg_words")).show()
+print("Positive reviews:", df.filter(col("sentiment") == "positive").count())
+print("Negative reviews:", df.filter(col("sentiment") == "negative").count())
 
-stop_words = ["the", "a", "an", "and", "of", "to", "is", "in", "it", "this", "that", "i", "was", "as", "for", "with", "but", "on", "movie", "film", "are", "its", "be", "have", "his", "he", "you", "not", "they", "at", "one", "by", "from", "so", "all", "or", "who", "there", "has", "just", "about", "an", "were", "if", "out", "her", "she", "had", "what", "more", "my", "when", "very", "me", "can", "which", "their", "than", "no", "been", "will", "would", "do", "we", "some", "only", "into", "up", "even", "them", "other", "most", "also", "really", "much", "get", "dont"]
+df = df.withColumn("review_length", length(col("review")))
 
-words = df.select("sentiment", explode(col("words")).alias("word"))
-words = words.filter((length(col("word")) > 2) & (~col("word").isin(stop_words)))
+long_reviews = df.filter(col("review_length") > 500)
+print("Reviews longer than 500 characters:", long_reviews.count())
+long_reviews.show(10, truncate=60)
 
-for label in ["positive", "negative"]:
-    print("Top 10 words in", label, "reviews")
-    (
-        words.filter(col("sentiment") == label)
-        .groupBy("word")
-        .agg(count("*").alias("total"))
-        .orderBy(col("total").desc())
-        .show(10)
-    )
+df.toPandas().to_csv("cleaned_movie_reviews.csv", index=False)
 
 spark.stop()

@@ -3,3 +3,4 @@ __pycache__/
 spark-warehouse/
 metastore_db/
 derby.log
+cleaned_movie_reviews.csv
